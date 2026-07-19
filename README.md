@@ -1,44 +1,62 @@
-# VK Audio Saver
+# VK Audio & Video Saver
 
-Chrome extension that adds a download button to VK audio tracks with bitrate and file size info.
+Chrome extension for downloading **audio** and **video** from VK (vk.com / vk.ru).
 
-![Screenshot](screenshot.png)
+**v2.2.5** · by [geonotfounds](https://geo.devs.surf/)
+
+## Previews
+
+### Audio download
+![Audio download](screenshot.png)
+
+### Video download
+![Video download](preview-video.png)
 
 ## Features
 
-- One-click audio download from VK (vk.com / vk.ru)
-- Shows bitrate (e.g. `320kbs`) and file size (e.g. `11.40 MB`) in a tooltip
-- Works on music tracks and podcast episodes
-- Lightweight (~14KB total)
+- **Audio**
+  - Download button on music tracks / podcasts
+  - Tooltip with bitrate + estimated size (`320kbs - 11.40 MB`)
+  - Saves as `.mp3` via Chrome Downloads API
+- **Video**
+  - **Download** button next to **Subscribe**
+  - Quality menu (`144p` … `1080p+` progressive MP4)
+  - Saves with real title (not CDN numeric ids)
+- Works on modern VK Video UI + classic modal
+- Lightweight MV3 extension (no external deps)
 
 ## Install
 
-### From source (developer mode)
-
-1. Clone this repo
+1. Clone this repo  
+   `git clone https://github.com/GeoXTen/vk-audio-downloader.git`
 2. Open `chrome://extensions/`
-3. Enable **Developer mode** (top right)
-4. Click **Load unpacked**
-5. Select this folder
+3. Enable **Developer mode**
+4. **Load unpacked** → select this folder
 
 ## How it works
 
-- Injects a MAIN world content script into VK pages
-- Resolves audio URLs via VK's internal API (`/music` endpoint)
-- Decodes VK's custom Base64 URL obfuscation
-- Estimates file size using VK's built-in HLS player
-- Opens audio in a new tab on click
+| Media | Method |
+|-------|--------|
+| Audio | MAIN-world script → track info (DOM / React fiber) → `/music` `reload_audio` → URL unmask → optional HLS size estimate → `chrome.downloads` |
+| Video | Parse `video{owner}_{id}` from URL → `POST /al_video.php?act=show` → collect `url###` MP4 qualities → `chrome.downloads` with forced filename |
+
+Bridge: `context.js` (MAIN) → `postMessage` → `js/bridge.js` (ISOLATED) → service worker → Downloads API.
 
 ## Permissions
 
-- `scripting` — inject content script into VK pages
-- Host access: `vk.com`, `vk.ru`
+- `scripting` — inject content scripts
+- `downloads` — save files with proper names
+- Hosts: `vk.com`, `vk.ru`, VK/OK CDN (`okcdn.ru`, `userapi.com`, `vkuservideo`, etc.)
 
-## Tech
+## Project layout
 
-- Chrome Manifest V3
-- Service worker + MAIN world content script
-- No external dependencies
+```
+context.js              # MAIN world: UI + resolve audio/video
+js/bridge.js            # ISOLATED bridge to extension APIs
+js/vk-native-worker.js  # service worker + downloads
+manifest.json
+images/icons/
+```
 
 ## Author
 
