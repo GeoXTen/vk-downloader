@@ -2,6 +2,8 @@
 
 Chrome extension that adds a download button to VK audio tracks with bitrate and file size info.
 
+![Screenshot](screenshot.png)
+
 ## Features
 
 - One-click audio download from VK (vk.com / vk.ru)
