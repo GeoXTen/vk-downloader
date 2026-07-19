@@ -1,0 +1,23 @@
+{
+    "manifest_version": 3,
+    "version": "2.0.0",
+    "name": "VK Audio Saver",
+    "description": "Quick audio download for VK — shows bitrate and file size info | geonotfounds (https://geo.devs.surf/)",
+    "author": "geonotfounds",
+    "icons": {
+        "16": "images/icons/16.png",
+        "32": "images/icons/32.png",
+        "64": "images/icons/64.png",
+        "128": "images/icons/128.png"
+    },
+    "background": {
+        "service_worker": "js/vk-native-worker.js"
+    },
+    "permissions": [
+        "scripting"
+    ],
+    "host_permissions": [
+        "https://vk.com/*",
+        "https://vk.ru/*"
+    ]
+}
