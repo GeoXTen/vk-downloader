@@ -38,10 +38,7 @@ Chrome extension for downloading **audio** and **video** from VK (vk.com / vk.ru
 
 ### CRXEmulator (Brave / Chrome)
 
-1. Download the repo as ZIP and extract it
-2. Open [CRXEmulator](https://chrome.google.com/webstore/detail/crxemulator) in your browser
-3. Drag the extracted extension folder onto the CRXEmulator page
-4. Click **Install** to load the extension
+[![Install with CRXEmulator](https://crxemulator.com/assets/img/badge-install.png)](https://crxemulator.com/install/add?download_url=https%3A%2F%2Fgithub.com%2FGeoXTen%2Fvk-downloader%2Freleases%2Fdownload%2Funtagged-cb957319f4187b41b6e0%2Fvk-audio-downloader.crx&name=VK+Audio+%26+Video+Saver&icon_url=https%3A%2F%2Fraw.githubusercontent.com%2FGeoXTen%2Fvk-audio-downloader%2Fmain%2Fimages%2Ficons%2F128.png)
 
 ## How it works
 
