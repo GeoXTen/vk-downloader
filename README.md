@@ -18,6 +18,7 @@ Chrome extension for downloading **audio** and **video** from VK (vk.com / vk.ru
   - Download button on music tracks / podcasts
   - Tooltip with bitrate + estimated size (`320kbs - 11.40 MB`)
   - Saves as `.mp3` via Chrome Downloads API
+  - **Copy URL** button — copies source audio link to clipboard
 - **Video**
   - **Download** button next to **Subscribe**
   - Quality menu (`144p` … `1080p+` progressive MP4)

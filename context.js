@@ -180,6 +180,13 @@ function init() {
 		.vkDlBtn .dl-tip { display:none !important; position:fixed !important; padding:4px 10px !important; background:#1a1a2e !important; color:#e0e0e0 !important; font:600 11px/1.4 system-ui,sans-serif !important; border-radius:20px !important; white-space:nowrap !important; pointer-events:none !important; z-index:99999 !important; box-shadow:0 2px 8px rgba(0,0,0,.25) !important; }
 		.vkDlBtn .dl-tip::after { content:'' !important; position:absolute !important; bottom:100% !important; left:50% !important; transform:translateX(-50%) !important; border:4px solid transparent !important; border-bottom-color:#1a1a2e !important; }
 		.vkDlBtn:hover .dl-tip { display:block !important; }
+		.vkCopyBtn { display:inline-flex !important; align-items:center !important; justify-content:center !important; width:28px !important; height:28px !important; border-radius:50% !important; cursor:pointer !important; transition:all .15s ease !important; flex-shrink:0 !important; position:relative !important; margin-left:2px !important; }
+		.vkCopyBtn:hover { background:rgba(40,167,69,.12) !important; }
+		.vkCopyBtn .copy-icon { width:16px; height:16px; color:rgba(0,0,0,.45) !important; transition:color .15s ease !important; }
+		.vkCopyBtn:hover .copy-icon { color:#28a745 !important; }
+		.vkCopyBtn .copy-tip { display:none !important; position:fixed !important; padding:4px 10px !important; background:#1a1a2e !important; color:#e0e0e0 !important; font:600 11px/1.4 system-ui,sans-serif !important; border-radius:20px !important; white-space:nowrap !important; pointer-events:none !important; z-index:99999 !important; box-shadow:0 2px 8px rgba(0,0,0,.25) !important; }
+		.vkCopyBtn .copy-tip::after { content:'' !important; position:absolute !important; bottom:100% !important; left:50% !important; transform:translateX(-50%) !important; border:4px solid transparent !important; border-bottom-color:#1a1a2e !important; }
+		.vkCopyBtn:hover .copy-tip { display:block !important; }
 		.vkVidBtn { display:inline-flex !important; align-items:center !important; gap:6px !important; margin:0 0 0 8px !important; padding:6px 12px !important; border-radius:8px !important; cursor:pointer !important; background:#0077ff !important; color:#fff !important; font:600 13px/1.2 system-ui,sans-serif !important; position:relative !important; z-index:2147483646 !important; user-select:none !important; vertical-align:middle !important; white-space:nowrap !important; }
 		.vkVidBtn:hover { background:#0066dd !important; }
 		.vkVidMenu { display:none !important; position:fixed !important; min-width:200px !important; max-height:280px !important; overflow:auto !important; padding:6px !important; background:#1a1a2e !important; border:1px solid rgba(255,255,255,.12) !important; border-radius:10px !important; box-shadow:0 12px 40px rgba(0,0,0,.55) !important; z-index:2147483647 !important; }
@@ -521,6 +528,12 @@ function injectButton(row) {
 	const cacheKey = info.ids.split('_', 2).join('_');
 	if (injectButton[cacheKey]) { row.DLBtn = injectButton[cacheKey]; return false; }
 
+	// --- wrapper for both buttons ---
+	const wrap = doc.createElement('span');
+	wrap.className = 'vkAudioBtns';
+	wrap.style.cssText = 'display:inline-flex !important; align-items:center !important; gap:1px !important;';
+
+	// --- download button ---
 	const btn = doc.createElement('a');
 	btn.className = 'vkDlBtn';
 	btn.title = '';
@@ -545,14 +558,14 @@ function injectButton(row) {
 				if (result.size) {
 					setSizeText(tip, result.size, info.duration);
 				} else if (info.duration) {
-			tip.textContent = 'resolving...';
-			ensureHls().then(ok => {
-				if (ok && window.Hls && window.Hls.isSupported()) {
-					estimateSize(result.url, tip, info.duration, () => {});
-				} else {
-					tip.textContent = 'ready';
-				}
-			});
+					tip.textContent = 'resolving...';
+					ensureHls().then(ok => {
+						if (ok && window.Hls && window.Hls.isSupported()) {
+							estimateSize(result.url, tip, info.duration, () => {});
+						} else {
+							tip.textContent = 'ready';
+						}
+					});
 				} else {
 					tip.textContent = 'ready';
 				}
@@ -582,7 +595,69 @@ function injectButton(row) {
 		}
 	});
 
-	row.DLBtn = injectButton[cacheKey] = btn;
+	// --- copy URL button ---
+	const cpy = doc.createElement('a');
+	cpy.className = 'vkCopyBtn';
+	cpy.title = '';
+
+	const cpyTip = doc.createElement('span');
+	cpyTip.className = 'copy-tip';
+	cpyTip.textContent = 'copy url';
+
+	cpy.innerHTML = `<svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
+	cpy.append(cpyTip);
+
+	cpy.addEventListener('mouseenter', () => {
+		const rect = cpy.getBoundingClientRect();
+		cpyTip.style.left = (rect.left + rect.width / 2) + 'px';
+		cpyTip.style.top = (rect.top - 6) + 'px';
+		cpyTip.style.transform = 'translate(-50%, -100%)';
+		if (cpyTip.textContent === 'copy url' || cpyTip.textContent === 'resolving...') {
+			resolveUrl(info, result => {
+				if (!result) { cpyTip.textContent = 'unavailable'; return; }
+				cpy.url = result.url;
+				cpyTip.textContent = 'copy url';
+			});
+		}
+	});
+
+	cpy.addEventListener('click', e => {
+		e.preventDefault();
+		e.stopPropagation();
+		const copyAction = url => {
+			navigator.clipboard.writeText(url).then(() => {
+				cpyTip.textContent = 'copied!';
+				setTimeout(() => { cpyTip.textContent = 'copy url'; }, 1500);
+			}).catch(() => {
+				const ta = doc.createElement('textarea');
+				ta.value = url;
+				ta.style.cssText = 'position:fixed;left:-9999px';
+				doc.body.append(ta);
+				ta.select();
+				doc.execCommand('copy');
+				ta.remove();
+				cpyTip.textContent = 'copied!';
+				setTimeout(() => { cpyTip.textContent = 'copy url'; }, 1500);
+			});
+		};
+		if (cpy.url) {
+			copyAction(cpy.url);
+		} else {
+			cpyTip.textContent = 'resolving...';
+			const rect = cpy.getBoundingClientRect();
+			cpyTip.style.left = (rect.left + rect.width / 2) + 'px';
+			cpyTip.style.top = (rect.top - 6) + 'px';
+			cpyTip.style.transform = 'translate(-50%, -100%)';
+			resolveUrl(info, result => {
+				if (!result) { cpyTip.textContent = 'unavailable'; return; }
+				cpy.url = result.url;
+				copyAction(result.url);
+			});
+		}
+	});
+
+	wrap.append(btn, cpy);
+	row.DLBtn = injectButton[cacheKey] = wrap;
 	return true;
 }
 
