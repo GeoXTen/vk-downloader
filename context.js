@@ -716,20 +716,25 @@ function walkFiber(el, up = false) {
 
 function resolveUrl(info, callback) {
 	if (info.url) {
-		callback({ url: decodeUrl(info.url) });
+		const decoded = decodeUrl(info.url);
+		console.log('[VK DL] resolveUrl (from info):', decoded.slice(0, 120));
+		callback({ url: decoded });
 		return;
 	}
 	const ids = info.ids;
 	const prefix = ids.split('_').length < 4 ? 's&audio_' : '&';
+	console.log('[VK DL] resolveUrl (from API):', ids);
 	xhrPost('/music', 'al=1&act=reload_audio' + prefix + 'ids=' + ids, resp => {
 		try {
 			const json = JSON.parse(resp.responseText);
 			const track = json?.payload?.[1]?.[0]?.[0];
 			if (track && typeof track !== 'string') {
-				callback({ url: decodeUrl(track[2]) });
+				const decoded = decodeUrl(track[2]);
+				console.log('[VK DL] resolveUrl (API result):', decoded.slice(0, 120));
+				callback({ url: decoded });
 				return;
 			}
-		} catch (e) {}
+		} catch (e) { console.log('[VK DL] resolveUrl error:', e); }
 		callback(null);
 	});
 }
@@ -769,28 +774,26 @@ function startDownload(url, filename) {
 	lastDlKey = key;
 	lastDlAt = now;
 	const name = (filename || 'vk-media') + (/\.(mp3|mp4|m4a)$/i.test(filename) ? '' : '.mp3');
-	fetch(url).then(r => r.body.getReader()).then(reader => {
-		const chunks = [];
-		function read() {
-			return reader.read().then(({ done, value }) => {
-				if (done) {
-					const blob = new Blob(chunks);
-					const objUrl = URL.createObjectURL(blob);
-					const a = doc.createElement('a');
-					a.href = objUrl;
-					a.download = name;
-					doc.body.append(a);
-					a.click();
-					a.remove();
-					setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
-					return;
-				}
-				chunks.push(value);
-				return read();
-			});
+	console.log('[VK DL] fetching:', url);
+	fetch(url).then(r => {
+		console.log('[VK DL] response:', r.status, r.headers.get('content-type'), r.url);
+		return r.arrayBuffer();
+	}).then(buf => {
+		console.log('[VK DL] total bytes:', buf.byteLength);
+		if (buf.byteLength < 10000) {
+			console.log('[VK DL] small response, first 500 chars:', new TextDecoder().decode(buf).slice(0, 500));
 		}
-		return read();
-	}).catch(() => {
+		const blob = new Blob([buf]);
+		const objUrl = URL.createObjectURL(blob);
+		const a = doc.createElement('a');
+		a.href = objUrl;
+		a.download = name;
+		doc.body.append(a);
+		a.click();
+		a.remove();
+		setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
+	}).catch(err => {
+		console.log('[VK DL] fetch error:', err);
 		// fallback: send to service worker
 		window.postMessage({
 			source: 'vk-audio-saver',
