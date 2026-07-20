@@ -17,7 +17,7 @@ Chrome extension for downloading **audio** and **video** from VK (vk.com / vk.ru
 - **Audio**
   - Download button on music tracks / podcasts
   - Tooltip with bitrate + estimated size (`320kbs - 11.40 MB`)
-  - Saves as `.mp3` via Chrome Downloads API
+  - Saves as `.mp4` via blob download (HLS segments concatenated)
   - **Copy URL** button — copies source audio link to clipboard
 - **Video**
   - **Download** button next to **Subscribe**
@@ -38,7 +38,7 @@ Chrome extension for downloading **audio** and **video** from VK (vk.com / vk.ru
 
 | Media | Method |
 |-------|--------|
-| Audio | MAIN-world script → track info (DOM / React fiber) → `/music` `reload_audio` → URL unmask → optional HLS size estimate → `chrome.downloads` |
+| Audio | MAIN-world script → track info (DOM / React fiber) → `/music` `reload_audio` → URL unmask → optional HLS size estimate → if m3u8: fetch manifest + download segments → blob download |
 | Video | Parse `video{owner}_{id}` from URL → `POST /al_video.php?act=show` → collect `url###` MP4 qualities → `chrome.downloads` with forced filename |
 
 Bridge: `context.js` (MAIN) → `postMessage` → `js/bridge.js` (ISOLATED) → service worker → Downloads API.

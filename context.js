@@ -766,6 +766,44 @@ function sanitizeName(raw, ext = '.mp3') {
 
 let lastDlKey = '';
 let lastDlAt = 0;
+
+function downloadHls(m3u8Url, name, onProgress) {
+	return fetch(m3u8Url).then(r => r.text()).then(manifest => {
+		const lines = manifest.split('\n').map(l => l.trim()).filter(Boolean);
+		const base = m3u8Url.replace(/\/[^/]*$/, '/');
+		const segs = [];
+		for (let i = 0; i < lines.length; i++) {
+			if (lines[i].startsWith('#')) continue;
+			const segUrl = lines[i].startsWith('http') ? lines[i] : base + lines[i];
+			segs.push(segUrl);
+		}
+		if (!segs.length) throw new Error('No segments in m3u8');
+		let loaded = 0;
+		const chunks = [];
+		function loadNext() {
+			if (loaded >= segs.length) {
+				const blob = new Blob(chunks);
+				const objUrl = URL.createObjectURL(blob);
+				const a = doc.createElement('a');
+				a.href = objUrl;
+				a.download = name;
+				doc.body.append(a);
+				a.click();
+				a.remove();
+				setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
+				return;
+			}
+			if (onProgress) onProgress(loaded, segs.length);
+			return fetch(segs[loaded]).then(r => r.arrayBuffer()).then(buf => {
+				chunks.push(buf);
+				loaded++;
+				return loadNext();
+			});
+		}
+		return loadNext();
+	});
+}
+
 function startDownload(url, filename) {
 	if (!url) return;
 	const key = url + '|' + (filename || '');
@@ -773,7 +811,15 @@ function startDownload(url, filename) {
 	if (key === lastDlKey && now - lastDlAt < 2500) return;
 	lastDlKey = key;
 	lastDlAt = now;
-	const name = (filename || 'vk-media') + (/\.(mp3|mp4|m4a)$/i.test(filename) ? '' : '.mp3');
+	const name = (filename || 'vk-media') + (/\.(mp3|mp4|m4a|webm)$/i.test(filename) ? '' : '.mp4');
+	if (/\.m3u8/i.test(url)) {
+		downloadHls(url, name, (done, total) => {
+			console.log('[VK DL] HLS segment', done + 1, '/', total);
+		}).catch(err => {
+			console.log('[VK DL] HLS error:', err);
+		});
+		return;
+	}
 	console.log('[VK DL] fetching:', url);
 	fetch(url).then(r => {
 		console.log('[VK DL] response:', r.status, r.headers.get('content-type'), r.url);
@@ -794,7 +840,6 @@ function startDownload(url, filename) {
 		setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
 	}).catch(err => {
 		console.log('[VK DL] fetch error:', err);
-		// fallback: send to service worker
 		window.postMessage({
 			source: 'vk-audio-saver',
 			type: 'download',
