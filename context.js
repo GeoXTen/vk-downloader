@@ -767,40 +767,79 @@ function sanitizeName(raw, ext = '.mp3') {
 let lastDlKey = '';
 let lastDlAt = 0;
 
-function downloadHls(m3u8Url, name, onProgress) {
-	return fetch(m3u8Url).then(r => r.text()).then(manifest => {
-		const lines = manifest.split('\n').map(l => l.trim()).filter(Boolean);
-		const base = m3u8Url.replace(/\/[^/]*$/, '/');
-		const segs = [];
-		for (let i = 0; i < lines.length; i++) {
-			if (lines[i].startsWith('#')) continue;
-			const segUrl = lines[i].startsWith('http') ? lines[i] : base + lines[i];
-			segs.push(segUrl);
+function downloadHls(m3u8Url, name, tip) {
+	ensureHls().then(ok => {
+		if (!ok || !window.Hls || !window.Hls.isSupported()) {
+			if (tip) tip.textContent = 'hls unsupported';
+			return;
 		}
-		if (!segs.length) throw new Error('No segments in m3u8');
-		let loaded = 0;
-		const chunks = [];
-		function loadNext() {
-			if (loaded >= segs.length) {
-				const blob = new Blob(chunks);
-				const objUrl = URL.createObjectURL(blob);
-				const a = doc.createElement('a');
-				a.href = objUrl;
-				a.download = name;
-				doc.body.append(a);
-				a.click();
-				a.remove();
-				setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
+		if (tip) tip.textContent = 'buffering...';
+		const hls = new window.Hls();
+		const audio = doc.createElement('audio');
+		let frag = null;
+		let frags = 0;
+		let totalDuration = 0;
+		let mediaErrors = 0;
+		let isAac = false;
+		const data = [];
+
+		function cleanup(err) {
+			if (tip && err) tip.textContent = 'error';
+			try { hls.stopLoad(); hls.destroy(); } catch(e) {}
+		}
+
+		function saveBlob() {
+			if (!data.length) { cleanup(true); return; }
+			const blob = new Blob(data);
+			const objUrl = URL.createObjectURL(blob);
+			const a = doc.createElement('a');
+			a.href = objUrl;
+			a.download = name;
+			doc.body.append(a);
+			a.click();
+			a.remove();
+			setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
+			if (tip) tip.textContent = 'saved';
+			cleanup();
+		}
+
+		hls.on(window.Hls.Events.MANIFEST_PARSED, (e, d) => {
+			const details = d.levels[0].details;
+			frags = details.fragments.length;
+			totalDuration = details.totalduration;
+		});
+
+		hls.on(window.Hls.Events.BUFFER_CODECS, (e, d) => {
+			isAac = d.audio && d.audio.container === 'audio/mp4';
+		});
+
+		hls.on(window.Hls.Events.BUFFER_APPENDING, (e, d) => {
+			frag = d.data;
+		});
+
+		hls.on(window.Hls.Events.FRAG_BUFFERED, (e, d) => {
+			if (frag) {
+				data.push(isAac ? frag.slice(8, frag.length) : frag);
+				audio.currentTime = d.frag.start + d.frag.duration;
+				if (tip) tip.textContent = data.length + '/' + frags;
+				frag = null;
+				if (data.length >= frags) saveBlob();
+			}
+		});
+
+		hls.on(window.Hls.Events.ERROR, (e, d) => {
+			if (d.details === 'bufferFullError' || d.details === 'fragLoadError') return cleanup(d);
+			if (d.type === window.Hls.ErrorTypes.MEDIA_ERROR && mediaErrors < 2) {
+				mediaErrors++;
+				hls.swapAudioCodec();
+				hls.recoverMediaError();
 				return;
 			}
-			if (onProgress) onProgress(loaded, segs.length);
-			return fetch(segs[loaded]).then(r => r.arrayBuffer()).then(buf => {
-				chunks.push(buf);
-				loaded++;
-				return loadNext();
-			});
-		}
-		return loadNext();
+			cleanup(d);
+		});
+
+		hls.loadSource(m3u8Url);
+		hls.attachMedia(audio);
 	});
 }
 
@@ -813,22 +852,10 @@ function startDownload(url, filename) {
 	lastDlAt = now;
 	const name = (filename || 'vk-media') + (/\.(mp3|mp4|m4a|webm)$/i.test(filename) ? '' : '.mp4');
 	if (/\.m3u8/i.test(url)) {
-		downloadHls(url, name, (done, total) => {
-			console.log('[VK DL] HLS segment', done + 1, '/', total);
-		}).catch(err => {
-			console.log('[VK DL] HLS error:', err);
-		});
+		downloadHls(url, name);
 		return;
 	}
-	console.log('[VK DL] fetching:', url);
-	fetch(url).then(r => {
-		console.log('[VK DL] response:', r.status, r.headers.get('content-type'), r.url);
-		return r.arrayBuffer();
-	}).then(buf => {
-		console.log('[VK DL] total bytes:', buf.byteLength);
-		if (buf.byteLength < 10000) {
-			console.log('[VK DL] small response, first 500 chars:', new TextDecoder().decode(buf).slice(0, 500));
-		}
+	fetch(url).then(r => r.arrayBuffer()).then(buf => {
 		const blob = new Blob([buf]);
 		const objUrl = URL.createObjectURL(blob);
 		const a = doc.createElement('a');
