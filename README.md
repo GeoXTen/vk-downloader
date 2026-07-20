@@ -2,7 +2,7 @@
 
 Chrome extension for downloading **audio** and **video** from VK (vk.com / vk.ru).
 
-**v2.2.5** · by [geonotfounds](https://geo.devs.surf/)
+**v2.5.2** · by [geonotfounds](https://geo.devs.surf/)
 
 ## Previews
 
@@ -17,7 +17,7 @@ Chrome extension for downloading **audio** and **video** from VK (vk.com / vk.ru
 - **Audio**
   - Download button on music tracks / podcasts
   - Tooltip with bitrate + estimated size (`320kbs - 11.40 MB`)
-  - Saves as `.mp4` via blob download (HLS segments concatenated)
+  - Saves as `.mp3` via hls.js demux
   - **Copy URL** button — copies source audio link to clipboard
 - **Video**
   - **Download** button next to **Subscribe**
@@ -28,11 +28,20 @@ Chrome extension for downloading **audio** and **video** from VK (vk.com / vk.ru
 
 ## Install
 
+### Developer mode (Chrome / Brave)
+
 1. Clone this repo  
    `git clone https://github.com/GeoXTen/vk-audio-downloader.git`
 2. Open `chrome://extensions/`
 3. Enable **Developer mode**
 4. **Load unpacked** → select this folder
+
+### CRXEmulator (Brave / Chrome)
+
+1. Download the repo as ZIP and extract it
+2. Open [CRXEmulator](https://chrome.google.com/webstore/detail/crxemulator) in your browser
+3. Drag the extracted extension folder onto the CRXEmulator page
+4. Click **Install** to load the extension
 
 ## How it works
 
