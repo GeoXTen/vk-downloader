@@ -358,8 +358,32 @@ function injectVideoButton(videoId) {
 	doc.body.append(menu);
 	const label = btn.querySelector('.vk-vid-label');
 	let loaded = false;
-	let loading = false;
 	let cache = null;
+
+	function populateMenu(info) {
+		cache = info;
+		loaded = true;
+		menu.innerHTML = '';
+		info.downloads
+			.sort((a, b) => (+b.quality || 0) - (+a.quality || 0))
+			.forEach(item => {
+				const row = doc.createElement('div');
+				row.className = 'vk-vid-item';
+				const qLabel = /^\d+$/.test(item.quality) ? (item.quality + 'p') : String(item.quality).toUpperCase();
+				row.innerHTML = `<b>${qLabel}</b><span>${item.format || 'mp4'}</span>`;
+				row.addEventListener('click', ev => {
+					ev.preventDefault();
+					ev.stopPropagation();
+					const q = /^\d+$/.test(item.quality) ? ('_' + item.quality + 'p') : '';
+					const base = ((cache && cache.title) || pageVideoTitle() || ('video_' + videoId)) + q;
+					startDownload(item.url, sanitizeName(base, '.mp4'));
+					closeMenu();
+					label.textContent = 'Saved';
+					setTimeout(() => { label.textContent = 'Download'; }, 1200);
+				});
+				menu.append(row);
+			});
+	}
 
 	const positionMenu = () => {
 		const r = btn.getBoundingClientRect();
@@ -396,38 +420,13 @@ function injectVideoButton(videoId) {
 			openMenu();
 			return;
 		}
-		if (loading) return;
-		loading = true;
 		label.textContent = 'Loading...';
 		resolveVideo(videoId, extractListId(), info => {
-			loading = false;
 			if (!info || !info.downloads?.length) {
 				label.textContent = 'Unavailable';
 				return;
 			}
-			cache = info;
-			label.textContent = 'Download';
-			menu.innerHTML = '';
-			info.downloads
-				.sort((a, b) => (+b.quality || 0) - (+a.quality || 0))
-				.forEach(item => {
-					const row = doc.createElement('div');
-					row.className = 'vk-vid-item';
-					const qLabel = /^\d+$/.test(item.quality) ? (item.quality + 'p') : String(item.quality).toUpperCase();
-					row.innerHTML = `<b>${qLabel}</b><span>${item.format || 'mp4'}</span>`;
-					row.addEventListener('click', ev => {
-						ev.preventDefault();
-						ev.stopPropagation();
-						const q = /^\d+$/.test(item.quality) ? ('_' + item.quality + 'p') : '';
-						const base = ((cache && cache.title) || pageVideoTitle() || ('video_' + videoId)) + q;
-						startDownload(item.url, sanitizeName(base, '.mp4'));
-						closeMenu();
-						label.textContent = 'Saved';
-						setTimeout(() => { label.textContent = 'Download'; }, 1200);
-					});
-					menu.append(row);
-				});
-			loaded = true;
+			populateMenu(info);
 			openMenu();
 		});
 	});
@@ -438,6 +437,13 @@ function injectVideoButton(videoId) {
 	window.addEventListener('scroll', () => { if (btn.classList.contains('open')) positionMenu(); }, true);
 	window.addEventListener('resize', () => { if (btn.classList.contains('open')) positionMenu(); });
 
+	// Pre-resolve video URL in background so click is instant
+	setTimeout(() => {
+		resolveVideo(videoId, extractListId(), info => {
+			if (info && info.downloads?.length) populateMenu(info);
+		});
+	}, 500);
+
 	if (!placeNextToSubscribe(btn)) {
 		const likeRow = mount.querySelector?.('.like_btns, #mv_actions, .mv_actions, [class*="actions"]');
 		if (likeRow) likeRow.append(btn);
@@ -446,25 +452,66 @@ function injectVideoButton(videoId) {
 }
 
 function resolveVideo(videoId, listId, callback) {
+	// Try to extract URL from page DOM first (zero network cost)
+	const fromDom = extractVideoFromDom(videoId);
+	if (fromDom) { callback(fromDom); return; }
+
 	const tries = [
 		{ url: '/al_video.php?act=show', body: 'act=show&al=1&autoplay=1&module=videolayer&video=' + encodeURIComponent(videoId) + (listId ? '&list=' + encodeURIComponent(listId) : '') },
 		{ url: '/al_video.php?act=show', body: 'act=show&al=1&autoplay=1&module=groups&video=' + encodeURIComponent(videoId) + (listId ? '&list=' + encodeURIComponent(listId) : '') }
 	];
 
-	const tryOne = i => {
-		if (i >= tries.length) return callback(null);
-		const t = tries[i];
+	let done = false;
+	let pending = tries.length;
+
+	tries.forEach(t => {
 		xhrPost(t.url, t.body, resp => {
+			if (done) return;
 			try {
-				const text = resp.responseText || '';
-				const json = JSON.parse(text);
+				const json = JSON.parse(resp.responseText || '');
 				const downloads = parseVideoPayload(json, videoId);
-				if (downloads) return callback(downloads);
+				if (downloads) {
+					done = true;
+					callback(downloads);
+					return;
+				}
 			} catch (e) {}
-			tryOne(i + 1);
+			pending--;
+			if (pending <= 0 && !done) callback(null);
 		});
-	};
-	tryOne(0);
+	});
+}
+
+function extractVideoFromDom(videoId) {
+	// Check for player scripts embedded in page
+	const scripts = doc.querySelectorAll('script');
+	for (const s of scripts) {
+		const t = s.textContent || '';
+		if (!t.includes(videoId)) continue;
+		// Look for url### keys in inline player config
+		const urlMatch = t.match(/"url(\d+)"\s*:\s*"(https?:[^"]+)"/);
+		if (urlMatch) {
+			const downloads = [];
+			const re = /"url(\d+)"\s*:\s*"(https?:[^"]+)"/g;
+			let m;
+			while ((m = re.exec(t)) !== null) {
+				downloads.push({ quality: m[1], format: 'mp4', url: m[2].replace(/\\\//g, '/') });
+			}
+			if (downloads.length) {
+				const titleMatch = t.match(/"title"\s*:\s*"([^"]+)"/);
+				return { id: videoId, title: titleMatch ? titleMatch[1] : '', downloads };
+			}
+		}
+	}
+	// Check for data-player or data-video-url attributes
+	const el = doc.querySelector(`[data-vid="${videoId}"], [data-video-id="${videoId}"]`);
+	if (el) {
+		const url = el.dataset?.playerUrl || el.dataset?.videoUrl || '';
+		if (url && /^https?:\/\//.test(url)) {
+			return { id: videoId, title: '', downloads: [{ quality: 'auto', format: 'mp4', url }] };
+		}
+	}
+	return null;
 }
 
 function parseVideoPayload(json, videoId) {
@@ -577,8 +624,8 @@ function injectButton(row) {
 		e.preventDefault();
 		e.stopPropagation();
 		if (btn.url) {
-			startDownload(btn.url, info.name || btn.download || 'audio.mp4');
-			tip.textContent = 'saved';
+			downloadHls(btn.url, info.name || btn.download || 'audio.mp3', tip);
+			tip.textContent = 'buffering...';
 		} else {
 			tip.textContent = 'resolving...';
 			const rect = btn.getBoundingClientRect();
@@ -589,8 +636,8 @@ function injectButton(row) {
 				if (!result) { tip.textContent = 'unavailable'; return; }
 				btn.download = info.name;
 				btn.url = result.url;
-				startDownload(result.url, info.name || 'audio.mp4');
-				tip.textContent = 'saved';
+				downloadHls(result.url, info.name || 'audio.mp3', tip);
+				tip.textContent = 'buffering...';
 			});
 		}
 	});
@@ -680,7 +727,7 @@ function extractInfo(el) {
 			ids += '_' + a[24];
 		}
 		return {
-			name: sanitizeName(a[4] + ' - ' + a[3] + (a[16] ? ' (' + a[16] + ')' : ''), '.mp4'),
+			name: sanitizeName(a[4] + ' - ' + a[3] + (a[16] ? ' (' + a[16] + ')' : ''), '.mp3'),
 			duration: a[5],
 			ids
 		};
@@ -688,7 +735,7 @@ function extractInfo(el) {
 
 	const audio = walkFiber(el);
 	return {
-		name: sanitizeName(audio.artist + ' - ' + audio.title + (audio.subtitle ? ' (' + audio.subtitle + ')' : ''), '.mp4'),
+		name: sanitizeName(audio.artist + ' - ' + audio.title + (audio.subtitle ? ' (' + audio.subtitle + ')' : ''), '.mp3'),
 		duration: audio.duration,
 		ids: audio.owner_id + '_' + audio.id + '_' + audio.access_key,
 		url: audio.url
@@ -770,15 +817,19 @@ let lastDlAt = 0;
 function downloadHls(m3u8Url, name, tip) {
 	ensureHls().then(ok => {
 		if (!ok || !window.Hls || !window.Hls.isSupported()) {
-			if (tip) tip.textContent = 'hls unsupported';
+			// fallback: raw parallel fetch
+			downloadHlsRaw(m3u8Url, name, tip);
 			return;
 		}
 		if (tip) tip.textContent = 'buffering...';
-		const hls = new window.Hls();
+		const hls = new window.Hls({
+			maxBufferLength: 30,
+			maxMaxBufferLength: 60,
+			startLevel: -1
+		});
 		const audio = doc.createElement('audio');
 		let frag = null;
 		let frags = 0;
-		let totalDuration = 0;
 		let mediaErrors = 0;
 		let isAac = false;
 		const data = [];
@@ -804,9 +855,7 @@ function downloadHls(m3u8Url, name, tip) {
 		}
 
 		hls.on(window.Hls.Events.MANIFEST_PARSED, (e, d) => {
-			const details = d.levels[0].details;
-			frags = details.fragments.length;
-			totalDuration = details.totalduration;
+			frags = d.levels[0].details.fragments.length;
 		});
 
 		hls.on(window.Hls.Events.BUFFER_CODECS, (e, d) => {
@@ -843,6 +892,48 @@ function downloadHls(m3u8Url, name, tip) {
 	});
 }
 
+function downloadHlsRaw(m3u8Url, name, tip) {
+	if (tip) tip.textContent = 'loading...';
+	fetch(m3u8Url).then(r => r.text()).then(manifest => {
+		const lines = manifest.split('\n').map(l => l.trim()).filter(Boolean);
+		const base = m3u8Url.replace(/\/[^/]*$/, '/');
+		const segs = [];
+		for (let i = 0; i < lines.length; i++) {
+			if (lines[i].startsWith('#')) continue;
+			segs.push(lines[i].startsWith('http') ? lines[i] : base + lines[i]);
+		}
+		if (!segs.length) { if (tip) tip.textContent = 'no segments'; return; }
+		if (tip) tip.textContent = '0/' + segs.length;
+		const chunks = [];
+		let idx = 0;
+		function next() {
+			if (idx >= segs.length) {
+				const blob = new Blob(chunks);
+				const objUrl = URL.createObjectURL(blob);
+				const a = doc.createElement('a');
+				a.href = objUrl;
+				a.download = name;
+				doc.body.append(a);
+				a.click();
+				a.remove();
+				setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
+				if (tip) tip.textContent = 'saved';
+				return;
+			}
+			if (tip) tip.textContent = (idx + 1) + '/' + segs.length;
+			fetch(segs[idx]).then(r => r.arrayBuffer()).then(buf => {
+				chunks.push(buf);
+				idx++;
+				next();
+			}).catch(() => { idx++; next(); });
+		}
+		next();
+	}).catch(err => {
+		console.log('[VK DL] HLS error:', err);
+		if (tip) tip.textContent = 'error';
+	});
+}
+
 function startDownload(url, filename) {
 	if (!url) return;
 	const key = url + '|' + (filename || '');
@@ -851,30 +942,13 @@ function startDownload(url, filename) {
 	lastDlKey = key;
 	lastDlAt = now;
 	const name = (filename || 'vk-media') + (/\.(mp3|mp4|m4a|webm)$/i.test(filename) ? '' : '.mp4');
-	if (/\.m3u8/i.test(url)) {
-		downloadHls(url, name);
-		return;
-	}
-	fetch(url).then(r => r.arrayBuffer()).then(buf => {
-		const blob = new Blob([buf]);
-		const objUrl = URL.createObjectURL(blob);
-		const a = doc.createElement('a');
-		a.href = objUrl;
-		a.download = name;
-		doc.body.append(a);
-		a.click();
-		a.remove();
-		setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
-	}).catch(err => {
-		console.log('[VK DL] fetch error:', err);
-		window.postMessage({
-			source: 'vk-audio-saver',
-			type: 'download',
-			url,
-			filename: name,
-			id: now + '_' + Math.random().toString(36).slice(2, 8)
-		}, '*');
-	});
+	window.postMessage({
+		source: 'vk-audio-saver',
+		type: 'download',
+		url,
+		filename: name,
+		id: now + '_' + Math.random().toString(36).slice(2, 8)
+	}, '*');
 }
 
 doc.readyState === 'loading'

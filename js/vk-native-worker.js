@@ -47,11 +47,10 @@ chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
 	if (forced) {
 		pendingNames.delete(item.id);
 		pendingNames.delete(item.url);
-		suggest({ filename: forced, conflictAction: 'uniquify' });
+		try { suggest({ filename: forced, conflictAction: 'uniquify' }); } catch(e) {}
 		return;
 	}
-	// If browser/CDN used a pure numeric name, keep extension but leave as-is only if no mapping
-	suggest();
+	try { suggest(); } catch(e) {}
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
