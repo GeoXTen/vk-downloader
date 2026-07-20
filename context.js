@@ -577,7 +577,7 @@ function injectButton(row) {
 		e.preventDefault();
 		e.stopPropagation();
 		if (btn.url) {
-			startDownload(btn.url, info.name || btn.download || 'audio.mp3');
+			startDownload(btn.url, info.name || btn.download || 'audio.mp4');
 			tip.textContent = 'saved';
 		} else {
 			tip.textContent = 'resolving...';
@@ -589,7 +589,7 @@ function injectButton(row) {
 				if (!result) { tip.textContent = 'unavailable'; return; }
 				btn.download = info.name;
 				btn.url = result.url;
-				startDownload(result.url, info.name || 'audio.mp3');
+				startDownload(result.url, info.name || 'audio.mp4');
 				tip.textContent = 'saved';
 			});
 		}
@@ -680,7 +680,7 @@ function extractInfo(el) {
 			ids += '_' + a[24];
 		}
 		return {
-			name: sanitizeName(a[4] + ' - ' + a[3] + (a[16] ? ' (' + a[16] + ')' : '')),
+			name: sanitizeName(a[4] + ' - ' + a[3] + (a[16] ? ' (' + a[16] + ')' : ''), '.mp4'),
 			duration: a[5],
 			ids
 		};
@@ -688,7 +688,7 @@ function extractInfo(el) {
 
 	const audio = walkFiber(el);
 	return {
-		name: sanitizeName(audio.artist + ' - ' + audio.title + (audio.subtitle ? ' (' + audio.subtitle + ')' : '')),
+		name: sanitizeName(audio.artist + ' - ' + audio.title + (audio.subtitle ? ' (' + audio.subtitle + ')' : ''), '.mp4'),
 		duration: audio.duration,
 		ids: audio.owner_id + '_' + audio.id + '_' + audio.access_key,
 		url: audio.url
