@@ -768,13 +768,38 @@ function startDownload(url, filename) {
 	if (key === lastDlKey && now - lastDlAt < 2500) return;
 	lastDlKey = key;
 	lastDlAt = now;
-	window.postMessage({
-		source: 'vk-audio-saver',
-		type: 'download',
-		url,
-		filename: filename || 'vk-media',
-		id: now + '_' + Math.random().toString(36).slice(2, 8)
-	}, '*');
+	const name = (filename || 'vk-media') + (/\.(mp3|mp4|m4a)$/i.test(filename) ? '' : '.mp3');
+	fetch(url).then(r => r.body.getReader()).then(reader => {
+		const chunks = [];
+		function read() {
+			return reader.read().then(({ done, value }) => {
+				if (done) {
+					const blob = new Blob(chunks);
+					const objUrl = URL.createObjectURL(blob);
+					const a = doc.createElement('a');
+					a.href = objUrl;
+					a.download = name;
+					doc.body.append(a);
+					a.click();
+					a.remove();
+					setTimeout(() => URL.revokeObjectURL(objUrl), 60000);
+					return;
+				}
+				chunks.push(value);
+				return read();
+			});
+		}
+		return read();
+	}).catch(() => {
+		// fallback: send to service worker
+		window.postMessage({
+			source: 'vk-audio-saver',
+			type: 'download',
+			url,
+			filename: name,
+			id: now + '_' + Math.random().toString(36).slice(2, 8)
+		}, '*');
+	});
 }
 
 doc.readyState === 'loading'
